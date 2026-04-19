@@ -1,0 +1,119 @@
+'use client'
+
+// ============================================================
+// CashFlow — useTransactions Hook
+// Semua operasi CRUD transaksi ke Supabase
+// ============================================================
+
+import { useState, useEffect, useCallback } from 'react'
+import { createClient } from '@/lib/supabase'
+import { Transaction, TransactionInput, Period } from '@/types'
+import { getPeriodRange } from '@/lib/utils'
+
+export function useTransactions(period: Period = 'all', offset: number = 0) {
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const supabase = createClient()
+
+  const fetch = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    const { start, end } = getPeriodRange(period, offset)
+
+    let query = supabase
+      .from('transactions')
+      .select('*')
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    if (start && end) {
+      query = query
+        .gte('date', start.toISOString().split('T')[0])
+        .lte('date', end.toISOString().split('T')[0])
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      setError(error.message)
+    } else {
+      setTransactions(data || [])
+    }
+    setLoading(false)
+  }, [period, offset])
+
+  useEffect(() => { fetch() }, [fetch])
+
+  // ── Tambah transaksi ──────────────────────────────────────
+  const addTransaction = async (input: TransactionInput) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Not authenticated' }
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert({ ...input, user_id: user.id })
+      .select()
+      .single()
+
+    if (!error && data) {
+      setTransactions(prev => [data, ...prev])
+    }
+    return { data, error }
+  }
+
+  // ── Hapus transaksi ───────────────────────────────────────
+  const deleteTransaction = async (id: string) => {
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', id)
+
+    if (!error) {
+      setTransactions(prev => prev.filter(t => t.id !== id))
+    }
+    return { error }
+  }
+
+  // ── Computed values ───────────────────────────────────────
+  const income = transactions
+    .filter(t => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0)
+
+  const expense = transactions
+    .filter(t => t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0)
+
+  const balance = income - expense
+
+  // Pengeluaran per kategori
+  const categoryTotals = transactions
+    .filter(t => t.type === 'expense')
+    .reduce((acc, t) => {
+      acc[t.category] = (acc[t.category] || 0) + t.amount
+      return acc
+    }, {} as Record<string, number>)
+
+  const categorySummary = Object.entries(categoryTotals)
+    .sort((a, b) => b[1] - a[1])
+    .map(([category, total]) => ({
+      category,
+      total,
+      percentage: expense > 0 ? Math.round((total / expense) * 100) : 0,
+    }))
+
+  return {
+    transactions,
+    loading,
+    error,
+    refetch: fetch,
+    addTransaction,
+    deleteTransaction,
+    // summary
+    income,
+    expense,
+    balance,
+    categorySummary,
+  }
+}

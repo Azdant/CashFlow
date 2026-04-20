@@ -103,7 +103,7 @@ export default function AccountModal({ account, onClose, onSave, onDelete }: Pro
               Tipe Akun
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {(ACCOUNT_TYPES as AccountType[]).map(t => (
+              {(ACCOUNT_TYPES as readonly AccountType[]).map(t => (
                 <button
                   key={t}
                   onClick={() => {

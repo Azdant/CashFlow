@@ -2,8 +2,11 @@
 -- CashFlow — Add Accounts Table Migration
 -- ============================================================
 
+-- Ensure UUID extension is enabled
+create extension if not exists "uuid-ossp";
+
 -- TABEL: accounts (wallet/money source)
-create table public.accounts (
+create table if not exists public.accounts (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references auth.users on delete cascade not null,
   name text not null,
@@ -17,20 +20,26 @@ create table public.accounts (
 
 alter table public.accounts enable row level security;
 
+drop policy if exists "Users can CRUD own accounts" on public.accounts;
 create policy "Users can CRUD own accounts"
   on public.accounts for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+drop index if exists accounts_user_id_idx;
 create index accounts_user_id_idx on public.accounts(user_id);
 
--- Add account_id to transactions
+-- Add account_id to transactions (if not exists)
 alter table public.transactions
-add column account_id uuid references public.accounts on delete set null;
+add column if not exists account_id uuid references public.accounts on delete set null;
 
+drop index if exists transactions_account_id_idx;
 create index transactions_account_id_idx on public.transactions(account_id);
 
 -- Function to update account balance when transaction is added/deleted
+drop trigger if exists update_account_balance_on_transaction on public.transactions;
+drop function if exists public.update_account_balance();
+
 create or replace function public.update_account_balance()
 returns trigger as $$
 begin

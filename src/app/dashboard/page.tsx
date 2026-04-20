@@ -8,12 +8,17 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useTransactions } from '@/hooks/useTransactions'
+import { useAccounts } from '@/hooks/useAccounts'
 import { useGoals } from '@/hooks/useGoals'
-import { fmtRp, fmtShort, getPeriodRange, CATEGORY_COLORS, CATEGORY_BG, CATEGORY_ICONS } from '@/lib/utils'
-import { Period } from '@/types'
+import { fmtRp, fmtShort, getPeriodRange, CATEGORY_COLORS, CATEGORY_BG, CATEGORY_ICONS, ACCOUNT_TYPE_ICONS } from '@/lib/utils'
+import { Period, AccountInput, Profile } from '@/types'
+import { exportTransactionsToCsv } from '@/lib/export'
 import TransactionModal from '@/components/modals/TransactionModal'
+import AccountModal from '@/components/modals/AccountModal'
 import GoalModal from '@/components/modals/GoalModal'
+import DeletePeriodModal from '@/components/modals/DeletePeriodModal'
 import CashFlowChart from '@/components/ui/CashFlowChart'
+import ProfileTab from '@/components/layout/ProfileTab'
 
 const PERIODS: { key: Period; label: string }[] = [
   { key: 'all', label: 'Semua' },
@@ -23,7 +28,7 @@ const PERIODS: { key: Period; label: string }[] = [
   { key: 'year', label: 'Tahun' },
 ]
 
-type Tab = 'home' | 'goals' | 'settings'
+type Tab = 'home' | 'accounts' | 'goals' | 'profile'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -33,20 +38,35 @@ export default function DashboardPage() {
   const [offset, setOffset] = useState(0)
   const [incomeModal, setIncomeModal] = useState(false)
   const [expenseModal, setExpenseModal] = useState(false)
+  const [accountModal, setAccountModal] = useState(false)
+  const [selectedAccount, setSelectedAccount] = useState<any>(null)
   const [goalModal, setGoalModal] = useState(false)
   const [spendLimit, setSpendLimit] = useState(0)
   const [limitInput, setLimitInput] = useState('')
+  const [deletePeriodModal, setDeletePeriodModal] = useState(false)
+  const [profile, setProfile] = useState<Profile | null>(null)
 
   const { transactions, loading, addTransaction, deleteTransaction,
     income, expense, balance, categorySummary, refetch } = useTransactions(period, offset)
+  const { accounts, addAccount, updateAccount, deleteAccount, totalBalance } = useAccounts()
   const { goals, addGoal, deleteGoal, refetch: refetchGoals } = useGoals()
 
-  // Cek auth
+  // Cek auth & load profile
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    const init = async () => {
+      const { data } = await supabase.auth.getSession()
       if (!data.session) router.push('/auth/login')
-    })
-    // Load spend limit dari localStorage (atau bisa dari Supabase settings)
+      
+      // Load profile
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .single()
+      if (profileData) setProfile(profileData)
+    }
+    init()
+    
+    // Load spend limit dari localStorage
     const saved = localStorage.getItem('cf_spend_limit')
     if (saved) { setSpendLimit(parseInt(saved)); setLimitInput(new Intl.NumberFormat('id-ID').format(parseInt(saved))) }
   }, [])
@@ -65,10 +85,50 @@ export default function DashboardPage() {
     router.push('/auth/login')
   }
 
+  const handleDeleteAccount = async () => {
+    const { data } = await supabase.auth.getSession()
+    if (!data.session?.user) return
+    
+    const { error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', data.session.user.id)
+    
+    if (!error) {
+      await supabase.auth.signOut()
+      router.push('/auth/login')
+    }
+  }
+
   const saveLimit = () => {
     const val = parseInt(limitInput.replace(/\./g, '').replace(/\D/g, '')) || 0
     setSpendLimit(val)
     localStorage.setItem('cf_spend_limit', String(val))
+  }
+
+  const handleDeletePeriod = async () => {
+    if (period === 'all') return
+    const { start, end } = getPeriodRange(period, offset)
+    if (!start || !end) return
+    
+    const startStr = start.toISOString().split('T')[0]
+    const endStr = end.toISOString().split('T')[0]
+    
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .gte('date', startStr)
+      .lte('date', endStr)
+    
+    if (!error) {
+      refetch()
+      setDeletePeriodModal(false)
+    }
+  }
+
+  const handleExport = () => {
+    const { label } = getPeriodRange(period, offset)
+    exportTransactionsToCsv(transactions, `cashflow-${period}-${label.replace(/\s+/g, '-')}.csv`)
   }
 
   return (
@@ -81,47 +141,78 @@ export default function DashboardPage() {
           <div className="px-4 pt-4 pb-2 flex-shrink-0">
             <div className="flex items-center justify-between mb-3">
               <span className="text-base font-medium text-gray-900">CashFlow</span>
-              <button
-                onClick={() => {/* export CSV */}}
-                className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 text-xs"
-              >
-                ↓
-              </button>
-            </div>
-
-            {/* Period tabs */}
-            <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-              {PERIODS.map(p => (
+              <div className="flex gap-1">
                 <button
-                  key={p.key}
-                  onClick={() => handlePeriodChange(p.key)}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    period === p.key
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-500'
-                  }`}
+                  onClick={handleExport}
+                  className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 text-xs hover:bg-gray-50"
+                  title="Export ke CSV"
                 >
-                  {p.label}
+                  ↓
                 </button>
-              ))}
+                {period !== 'all' && (
+                  <button
+                    onClick={() => setDeletePeriodModal(true)}
+                    className="w-7 h-7 rounded-lg border border-red-200 flex items-center justify-center text-red-500 text-xs hover:bg-red-50"
+                    title="Hapus periode"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Period nav */}
+            {/* Period selector */}
             {period !== 'all' && (
-              <div className="flex items-center justify-between mt-2">
+              <div className="flex items-center justify-between gap-2 mb-3">
                 <button
                   onClick={() => setOffset(o => o - 1)}
-                  className="w-6 h-6 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 text-xs"
+                  className="px-2 py-1 rounded-lg border border-gray-200 text-gray-500 text-xs hover:bg-gray-50"
                 >
-                  ‹
+                  ‹ Sebelumnya
                 </button>
-                <span className="text-xs text-gray-500">{periodLabel}</span>
+                <select
+                  value={period}
+                  onChange={(e) => handlePeriodChange(e.target.value as Period)}
+                  className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-2 py-1"
+                >
+                  {PERIODS.map(p => (
+                    <option key={p.key} value={p.key}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
                 <button
                   onClick={() => setOffset(o => o + 1)}
-                  className="w-6 h-6 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 text-xs"
+                  className="px-2 py-1 rounded-lg border border-gray-200 text-gray-500 text-xs hover:bg-gray-50"
                 >
-                  ›
+                  Berikutnya ›
                 </button>
+              </div>
+            )}
+
+            {/* Period label */}
+            {period !== 'all' && (
+              <div className="text-xs text-gray-500 text-center mb-2">
+                {periodLabel}
+              </div>
+            )}
+
+            {/* Period tabs (when all) */}
+            {period === 'all' && (
+              <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+                {PERIODS.map(p => (
+                  <button
+                    key={p.key}
+                    onClick={() => handlePeriodChange(p.key)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      period === p.key
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-500'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -263,6 +354,69 @@ export default function DashboardPage() {
         </>
       )}
 
+      {/* ── ACCOUNTS TAB ─────────────────────────────── */}
+      {tab === 'accounts' && (
+        <>
+          <div className="px-4 pt-4 pb-2 flex-shrink-0">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-base font-medium text-gray-900">Akun</span>
+              <button
+                onClick={() => { setSelectedAccount(null); setAccountModal(true) }}
+                className="text-xs text-emerald-700 font-medium px-3 py-1.5 rounded-lg border border-emerald-200"
+              >
+                + Tambah
+              </button>
+            </div>
+            
+            {/* Total balance */}
+            {accounts.length > 0 && (
+              <div className="bg-emerald-900 rounded-xl p-3 text-white">
+                <p className="text-xs opacity-70 mb-1">Total Saldo</p>
+                <p className="text-xl font-medium">{fmtRp(totalBalance)}</p>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex-1 overflow-y-auto px-4 pb-4 pt-2">
+            {accounts.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-sm text-gray-400">Belum ada akun. Tambahkan akun untuk mengelola uang Anda.</p>
+                <button
+                  onClick={() => { setSelectedAccount(null); setAccountModal(true) }}
+                  className="mt-3 text-xs text-emerald-700 font-medium"
+                >
+                  Tambah akun pertama →
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {accounts.map(acc => (
+                  <button
+                    key={acc.id}
+                    onClick={() => { setSelectedAccount(acc); setAccountModal(true) }}
+                    className="w-full text-left border border-gray-100 rounded-xl p-3 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 mb-2">
+                      <div
+                        className="w-10 h-10 rounded-lg flex items-center justify-center text-lg flex-shrink-0"
+                        style={{ background: acc.color + '20' }}
+                      >
+                        {ACCOUNT_TYPE_ICONS[acc.type]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900">{acc.name}</p>
+                        <p className="text-xs text-gray-400">{acc.type}</p>
+                      </div>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 text-right">{fmtRp(acc.balance)}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* ── GOALS TAB ────────────────────────────────── */}
       {tab === 'goals' && (
         <>
@@ -324,54 +478,26 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* ── SETTINGS TAB ─────────────────────────────── */}
-      {tab === 'settings' && (
-        <>
-          <div className="px-4 pt-4 pb-2 flex-shrink-0">
-            <span className="text-base font-medium text-gray-900">Pengaturan</span>
-          </div>
-          <div className="flex-1 overflow-y-auto px-4 pb-4 pt-2 space-y-4">
-            <div className="border border-gray-100 rounded-xl p-3">
-              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-1">Batas pengeluaran</p>
-              <p className="text-xs text-gray-500 mb-3">Notifikasi muncul saat pengeluaran ≥ 80% dari batas.</p>
-              <div className="flex gap-2">
-                <input
-                  className="input flex-1"
-                  placeholder="cth. 5.000.000"
-                  value={limitInput}
-                  onChange={e => {
-                    const raw = e.target.value.replace(/\./g, '').replace(/\D/g, '')
-                    setLimitInput(raw ? new Intl.NumberFormat('id-ID').format(parseInt(raw)) : '')
-                  }}
-                />
-                <button
-                  onClick={saveLimit}
-                  className="px-4 py-2 bg-emerald-700 text-white text-sm rounded-xl font-medium"
-                >
-                  Simpan
-                </button>
-              </div>
-              {spendLimit > 0 && (
-                <p className="text-xs text-gray-500 mt-2">Batas aktif: {fmtRp(spendLimit)} / bulan</p>
-              )}
-            </div>
-
-            <button
-              onClick={handleLogout}
-              className="w-full py-3 rounded-xl border border-red-100 text-red-600 text-sm font-medium"
-            >
-              Keluar
-            </button>
-          </div>
-        </>
+      {/* ── PROFILE TAB ──────────────────────────────── */}
+      {tab === 'profile' && (
+        <ProfileTab
+          profile={profile}
+          spendLimit={spendLimit}
+          limitInput={limitInput}
+          onLimitChange={setLimitInput}
+          onSaveLimit={saveLimit}
+          onLogout={handleLogout}
+          onDeleteAccount={handleDeleteAccount}
+        />
       )}
 
       {/* ── Bottom Navigation (LOCKED) ──────────────── */}
       <nav className="flex-shrink-0 flex border-t border-gray-100 bg-white">
         {([
           { key: 'home', icon: '🏠', label: 'Beranda' },
+          { key: 'accounts', icon: '💳', label: 'Akun' },
           { key: 'goals', icon: '🎯', label: 'Goals' },
-          { key: 'settings', icon: '⚙️', label: 'Setelan' },
+          { key: 'profile', icon: '👤', label: 'Profil' },
         ] as { key: Tab; icon: string; label: string }[]).map(n => (
           <button
             key={n.key}
@@ -390,6 +516,7 @@ export default function DashboardPage() {
       {incomeModal && (
         <TransactionModal
           type="income"
+          accounts={accounts}
           onClose={() => setIncomeModal(false)}
           onSave={async (input) => { await addTransaction(input); setIncomeModal(false) }}
         />
@@ -397,14 +524,43 @@ export default function DashboardPage() {
       {expenseModal && (
         <TransactionModal
           type="expense"
+          accounts={accounts}
           onClose={() => setExpenseModal(false)}
           onSave={async (input) => { await addTransaction(input); setExpenseModal(false) }}
+        />
+      )}
+      {accountModal && (
+        <AccountModal
+          account={selectedAccount}
+          onClose={() => { setAccountModal(false); setSelectedAccount(null) }}
+          onSave={async (input: AccountInput) => {
+            if (selectedAccount) {
+              await updateAccount(selectedAccount.id, input)
+            } else {
+              await addAccount(input)
+            }
+            setAccountModal(false)
+            setSelectedAccount(null)
+          }}
+          onDelete={selectedAccount ? async () => {
+            await deleteAccount(selectedAccount.id)
+            setAccountModal(false)
+            setSelectedAccount(null)
+          } : undefined}
         />
       )}
       {goalModal && (
         <GoalModal
           onClose={() => setGoalModal(false)}
           onSave={async (input) => { await addGoal(input); setGoalModal(false) }}
+        />
+      )}
+      {deletePeriodModal && (
+        <DeletePeriodModal
+          period={period}
+          label={getPeriodRange(period, offset).label}
+          onClose={() => setDeletePeriodModal(false)}
+          onConfirm={handleDeletePeriod}
         />
       )}
     </div>

@@ -54,6 +54,37 @@ export const EXPENSE_CATEGORIES = [
   'Hiburan', 'Kesehatan', 'Pendidikan', 'Lainnya',
 ] as const
 
+export const ACCOUNT_TYPES = [
+  'bank', 'ewallet', 'cash', 'investment', 'savings', 'other'
+] as const
+
+export const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  bank: 'Bank',
+  ewallet: 'E-Wallet',
+  cash: 'Tunai',
+  investment: 'Investasi',
+  savings: 'Tabungan',
+  other: 'Lainnya',
+}
+
+export const ACCOUNT_TYPE_ICONS: Record<string, string> = {
+  bank: '🏦',
+  ewallet: '📱',
+  cash: '💵',
+  investment: '📈',
+  savings: '🏧',
+  other: '💼',
+}
+
+export const ACCOUNT_COLORS: Record<string, string> = {
+  bank: '#2563eb',
+  ewallet: '#7c3aed',
+  cash: '#059669',
+  investment: '#dc2626',
+  savings: '#0891b2',
+  other: '#6b7280',
+}
+
 export const CATEGORY_COLORS: Record<string, string> = {
   Makanan: '#059669', Transport: '#2563eb', Belanja: '#d97706',
   Tagihan: '#ea580c', Hiburan: '#7c3aed', Kesehatan: '#dc2626',

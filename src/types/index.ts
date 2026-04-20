@@ -27,23 +27,13 @@ export type Category = IncomeCategory | ExpenseCategory
 
 export type AccountType = 'bank' | 'ewallet' | 'cash' | 'investment' | 'savings' | 'other'
 
+export type FundType = 'bank' | 'ewallet' | 'cash'
+
 export type Period = 'all' | 'day' | 'week' | 'month' | 'year'
 
 // ============================================================
 // Database row types (sesuai schema Supabase)
 // ============================================================
-
-export interface Account {
-  id: string
-  user_id: string
-  name: string
-  type: AccountType
-  balance: number
-  color: string
-  icon: string
-  created_at: string
-  updated_at: string
-}
 
 export interface Transaction {
   id: string
@@ -52,7 +42,7 @@ export interface Transaction {
   amount: number
   description: string
   category: Category
-  account_id?: string
+  fund_type: FundType
   date: string // ISO date string: "2025-04-19"
   created_at: string
 }
@@ -108,15 +98,8 @@ export interface TransactionInput {
   amount: number
   description: string
   category: Category
-  account_id?: string
+  fund_type: FundType
   date: string
-}
-
-export interface AccountInput {
-  name: string
-  type: AccountType
-  color?: string
-  icon?: string
 }
 
 export interface GoalInput {

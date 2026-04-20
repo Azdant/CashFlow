@@ -6,23 +6,22 @@
 // ============================================================
 
 import { useState } from 'react'
-import { TransactionType, TransactionInput, Account } from '@/types'
+import { TransactionType, TransactionInput, FundType } from '@/types'
 import {
   fmtRp, INCOME_CATEGORIES, EXPENSE_CATEGORIES,
   QUICK_AMOUNTS_INCOME, QUICK_AMOUNTS_EXPENSE, fmtShort,
-  ACCOUNT_TYPE_ICONS,
+  FUND_TYPE_ICONS, FUND_TYPES,
 } from '@/lib/utils'
 
 interface Props {
   type: TransactionType
-  accounts: Account[]
   onClose: () => void
   onSave: (input: TransactionInput) => Promise<void>
 }
 
 const NUMPAD_KEYS = ['1','2','3','4','5','6','7','8','9','000','0','⌫']
 
-export default function TransactionModal({ type, accounts, onClose, onSave }: Props) {
+export default function TransactionModal({ type, onClose, onSave }: Props) {
   const isIncome = type === 'income'
   const categories = isIncome ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
   const quickAmounts = isIncome ? QUICK_AMOUNTS_INCOME : QUICK_AMOUNTS_EXPENSE
@@ -30,10 +29,9 @@ export default function TransactionModal({ type, accounts, onClose, onSave }: Pr
   const [amount, setAmount] = useState(0)
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('')
-  const [accountId, setAccountId] = useState('')
+  const [fundType, setFundType] = useState<FundType>('cash')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [catError, setCatError] = useState(false)
-  const [acctError, setAcctError] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const handleNumpad = (key: string) => {
@@ -49,15 +47,14 @@ export default function TransactionModal({ type, accounts, onClose, onSave }: Pr
 
   const handleSave = async () => {
     if (!category) { setCatError(true); return }
-    if (!accountId) { setAcctError(true); return }
     if (!amount) return
     setLoading(true)
     await onSave({ 
       type, 
       amount, 
       description: description || (isIncome ? 'Pemasukan' : 'Pengeluaran'), 
-      category: category as any, 
-      account_id: accountId,
+      category: category as any,
+      fund_type: fundType,
       date 
     })
     setLoading(false)
@@ -151,33 +148,28 @@ export default function TransactionModal({ type, accounts, onClose, onSave }: Pr
             onChange={e => setDate(e.target.value)}
           />
 
-          {/* Account */}
-          {accounts.length > 0 && (
-            <div className="mb-4">
-              <p className="text-xs text-gray-400 mb-2">
-                Akun <span className="text-red-500">*</span>
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {accounts.map(acc => (
-                  <button
-                    key={acc.id}
-                    onClick={() => { setAccountId(acc.id); setAcctError(false) }}
-                    className={`px-3 py-1.5 rounded-full text-xs border transition-all flex items-center gap-1 ${
-                      accountId === acc.id
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                        : 'border-gray-200 text-gray-500 bg-gray-50'
-                    }`}
-                  >
-                    <span>{ACCOUNT_TYPE_ICONS[acc.type]}</span>
-                    {acc.name}
-                  </button>
-                ))}
-              </div>
-              {acctError && (
-                <p className="text-xs text-red-500 mt-1.5">Pilih akun terlebih dahulu.</p>
-              )}
+          {/* Fund Type */}
+          <div className="mb-4">
+            <p className="text-xs text-gray-400 mb-2">
+              Jenis Dana <span className="text-red-500">*</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(FUND_TYPES as readonly FundType[]).map(ft => (
+                <button
+                  key={ft}
+                  onClick={() => setFundType(ft)}
+                  className={`px-3 py-1.5 rounded-full text-xs border transition-all flex items-center gap-1 ${
+                    fundType === ft
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                      : 'border-gray-200 text-gray-500 bg-gray-50'
+                  }`}
+                >
+                  <span>{FUND_TYPE_ICONS[ft]}</span>
+                  {ft === 'bank' ? 'Bank' : ft === 'ewallet' ? 'E-Wallet' : 'Tunai'}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* Category */}
           <div className="mb-4">

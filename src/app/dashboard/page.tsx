@@ -8,15 +8,14 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useTransactions } from '@/hooks/useTransactions'
-import { useAccounts } from '@/hooks/useAccounts'
 import { useGoals } from '@/hooks/useGoals'
-import { fmtRp, fmtShort, getPeriodRange, CATEGORY_COLORS, CATEGORY_BG, CATEGORY_ICONS, ACCOUNT_TYPE_ICONS } from '@/lib/utils'
-import { Period, AccountInput, Profile } from '@/types'
+import { fmtRp, fmtShort, getPeriodRange, CATEGORY_COLORS, CATEGORY_BG, CATEGORY_ICONS } from '@/lib/utils'
+import { Period, Profile } from '@/types'
 import { exportTransactionsToCsv } from '@/lib/export'
 import TransactionModal from '@/components/modals/TransactionModal'
-import AccountModal from '@/components/modals/AccountModal'
 import GoalModal from '@/components/modals/GoalModal'
 import DeletePeriodModal from '@/components/modals/DeletePeriodModal'
+import DatePicker from '@/components/ui/DatePicker'
 import CashFlowChart from '@/components/ui/CashFlowChart'
 import ProfileTab from '@/components/layout/ProfileTab'
 
@@ -28,7 +27,7 @@ const PERIODS: { key: Period; label: string }[] = [
   { key: 'year', label: 'Tahun' },
 ]
 
-type Tab = 'home' | 'accounts' | 'goals' | 'profile'
+type Tab = 'home' | 'goals' | 'profile'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -36,10 +35,10 @@ export default function DashboardPage() {
   const [tab, setTab] = useState<Tab>('home')
   const [period, setPeriod] = useState<Period>('all')
   const [offset, setOffset] = useState(0)
+  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [showDatePicker, setShowDatePicker] = useState(false)
   const [incomeModal, setIncomeModal] = useState(false)
   const [expenseModal, setExpenseModal] = useState(false)
-  const [accountModal, setAccountModal] = useState(false)
-  const [selectedAccount, setSelectedAccount] = useState<any>(null)
   const [goalModal, setGoalModal] = useState(false)
   const [spendLimit, setSpendLimit] = useState(0)
   const [limitInput, setLimitInput] = useState('')
@@ -48,7 +47,6 @@ export default function DashboardPage() {
 
   const { transactions, loading, addTransaction, deleteTransaction,
     income, expense, balance, categorySummary, refetch } = useTransactions(period, offset)
-  const { accounts, addAccount, updateAccount, deleteAccount, totalBalance } = useAccounts()
   const { goals, addGoal, deleteGoal, refetch: refetchGoals } = useGoals()
 
   // Cek auth & load profile
@@ -170,17 +168,26 @@ export default function DashboardPage() {
                 >
                   ‹ Sebelumnya
                 </button>
-                <select
-                  value={period}
-                  onChange={(e) => handlePeriodChange(e.target.value as Period)}
-                  className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-2 py-1"
-                >
-                  {PERIODS.map(p => (
-                    <option key={p.key} value={p.key}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex-1 flex items-center gap-2">
+                  <select
+                    value={period}
+                    onChange={(e) => handlePeriodChange(e.target.value as Period)}
+                    className="flex-1 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-2 py-1"
+                  >
+                    {PERIODS.map(p => (
+                      <option key={p.key} value={p.key}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => setShowDatePicker(true)}
+                    className="px-2 py-1 rounded-lg border border-gray-200 text-gray-500 text-xs hover:bg-gray-50"
+                    title="Pilih tanggal"
+                  >
+                    📅
+                  </button>
+                </div>
                 <button
                   onClick={() => setOffset(o => o + 1)}
                   className="px-2 py-1 rounded-lg border border-gray-200 text-gray-500 text-xs hover:bg-gray-50"
@@ -264,6 +271,12 @@ export default function DashboardPage() {
               </button>
             </div>
 
+            {/* Chart (moved to top) */}
+            <div className="mx-4 mb-3 border border-gray-100 rounded-xl p-3">
+              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-2">Arus kas</p>
+              <CashFlowChart transactions={transactions} period={period} />
+            </div>
+
             {/* Stat cards */}
             <div className="flex gap-2 mx-4 mb-3">
               {[
@@ -278,7 +291,7 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {/* Pengeluaran per kategori */}
+            {/* Pengeluaran per kategori (moved down) */}
             <div className="mx-4 mb-3 border border-gray-100 rounded-xl p-3">
               <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-2">Pengeluaran per kategori</p>
               {categorySummary.length === 0 ? (
@@ -310,12 +323,6 @@ export default function DashboardPage() {
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* Chart */}
-            <div className="mx-4 mb-3 border border-gray-100 rounded-xl p-3">
-              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-2">Arus kas</p>
-              <CashFlowChart transactions={transactions} period={period} />
             </div>
 
             {/* Transaksi terbaru */}
@@ -354,67 +361,16 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* ── ACCOUNTS TAB ─────────────────────────────── */}
-      {tab === 'accounts' && (
-        <>
-          <div className="px-4 pt-4 pb-2 flex-shrink-0">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-base font-medium text-gray-900">Akun</span>
-              <button
-                onClick={() => { setSelectedAccount(null); setAccountModal(true) }}
-                className="text-xs text-emerald-700 font-medium px-3 py-1.5 rounded-lg border border-emerald-200"
-              >
-                + Tambah
-              </button>
-            </div>
-            
-            {/* Total balance */}
-            {accounts.length > 0 && (
-              <div className="bg-emerald-900 rounded-xl p-3 text-white">
-                <p className="text-xs opacity-70 mb-1">Total Saldo</p>
-                <p className="text-xl font-medium">{fmtRp(totalBalance)}</p>
-              </div>
-            )}
-          </div>
-          
-          <div className="flex-1 overflow-y-auto px-4 pb-4 pt-2">
-            {accounts.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-sm text-gray-400">Belum ada akun. Tambahkan akun untuk mengelola uang Anda.</p>
-                <button
-                  onClick={() => { setSelectedAccount(null); setAccountModal(true) }}
-                  className="mt-3 text-xs text-emerald-700 font-medium"
-                >
-                  Tambah akun pertama →
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {accounts.map(acc => (
-                  <button
-                    key={acc.id}
-                    onClick={() => { setSelectedAccount(acc); setAccountModal(true) }}
-                    className="w-full text-left border border-gray-100 rounded-xl p-3 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 mb-2">
-                      <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center text-lg flex-shrink-0"
-                        style={{ background: acc.color + '20' }}
-                      >
-                        {ACCOUNT_TYPE_ICONS[acc.type]}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">{acc.name}</p>
-                        <p className="text-xs text-gray-400">{acc.type}</p>
-                      </div>
-                    </div>
-                    <p className="text-sm font-medium text-gray-900 text-right">{fmtRp(acc.balance)}</p>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </>
+      {showDatePicker && (
+        <DatePicker
+          value={selectedDate}
+          onChange={(date) => {
+            setSelectedDate(date)
+            setPeriod('day')
+            setOffset(0)
+          }}
+          onClose={() => setShowDatePicker(false)}
+        />
       )}
 
       {/* ── GOALS TAB ────────────────────────────────── */}
@@ -495,7 +451,6 @@ export default function DashboardPage() {
       <nav className="flex-shrink-0 flex border-t border-gray-100 bg-white">
         {([
           { key: 'home', icon: '🏠', label: 'Beranda' },
-          { key: 'accounts', icon: '💳', label: 'Akun' },
           { key: 'goals', icon: '🎯', label: 'Goals' },
           { key: 'profile', icon: '👤', label: 'Profil' },
         ] as { key: Tab; icon: string; label: string }[]).map(n => (
@@ -516,7 +471,6 @@ export default function DashboardPage() {
       {incomeModal && (
         <TransactionModal
           type="income"
-          accounts={accounts}
           onClose={() => setIncomeModal(false)}
           onSave={async (input) => { await addTransaction(input); setIncomeModal(false) }}
         />
@@ -524,29 +478,8 @@ export default function DashboardPage() {
       {expenseModal && (
         <TransactionModal
           type="expense"
-          accounts={accounts}
           onClose={() => setExpenseModal(false)}
           onSave={async (input) => { await addTransaction(input); setExpenseModal(false) }}
-        />
-      )}
-      {accountModal && (
-        <AccountModal
-          account={selectedAccount}
-          onClose={() => { setAccountModal(false); setSelectedAccount(null) }}
-          onSave={async (input: AccountInput) => {
-            if (selectedAccount) {
-              await updateAccount(selectedAccount.id, input)
-            } else {
-              await addAccount(input)
-            }
-            setAccountModal(false)
-            setSelectedAccount(null)
-          }}
-          onDelete={selectedAccount ? async () => {
-            await deleteAccount(selectedAccount.id)
-            setAccountModal(false)
-            setSelectedAccount(null)
-          } : undefined}
         />
       )}
       {goalModal && (

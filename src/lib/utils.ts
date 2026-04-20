@@ -58,6 +58,22 @@ export const ACCOUNT_TYPES = [
   'bank', 'ewallet', 'cash', 'investment', 'savings', 'other'
 ] as const
 
+export const FUND_TYPES = [
+  'bank', 'ewallet', 'cash'
+] as const
+
+export const FUND_TYPE_LABELS: Record<string, string> = {
+  bank: 'Bank',
+  ewallet: 'E-Wallet',
+  cash: 'Tunai',
+}
+
+export const FUND_TYPE_ICONS: Record<string, string> = {
+  bank: '🏦',
+  ewallet: '📱',
+  cash: '💵',
+}
+
 export const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   bank: 'Bank',
   ewallet: 'E-Wallet',

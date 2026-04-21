@@ -76,6 +76,53 @@ export function useTransactions(period: Period = 'all', offset: number = 0) {
     return { error }
   }
 
+  // ── Transfer antar fund type ───────────────────────────────
+  const transferFund = async (fromFund: string, toFund: string, amount: number) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Not authenticated' }
+
+    // Buat 2 transaksi: expense dari source, income ke destination
+    const baseData = {
+      user_id: user.id,
+      amount,
+      date: new Date().toISOString().split('T')[0],
+      created_at: new Date().toISOString(),
+    }
+
+    const expenseData = {
+      ...baseData,
+      type: 'expense' as const,
+      category: 'Lainnya' as const,
+      description: `Transfer ke ${toFund === 'bank' ? 'Bank' : toFund === 'ewallet' ? 'E-Wallet' : 'Tunai'}`,
+      fund_type: fromFund,
+    }
+
+    const incomeData = {
+      ...baseData,
+      type: 'income' as const,
+      category: 'Lainnya' as const,
+      description: `Transfer dari ${fromFund === 'bank' ? 'Bank' : fromFund === 'ewallet' ? 'E-Wallet' : 'Tunai'}`,
+      fund_type: toFund,
+    }
+
+    // Insert both transactions
+    const { error: expErr } = await supabase
+      .from('transactions')
+      .insert(expenseData)
+
+    if (expErr) return { error: expErr.message }
+
+    const { error: incErr } = await supabase
+      .from('transactions')
+      .insert(incomeData)
+
+    if (incErr) return { error: incErr.message }
+
+    // Refresh transactions
+    await fetch()
+    return { error: null }
+  }
+
   // ── Computed values ───────────────────────────────────────
   const income = transactions
     .filter(t => t.type === 'income')
@@ -135,6 +182,13 @@ export function useTransactions(period: Period = 'all', offset: number = 0) {
       percentage: expense > 0 ? Math.round((total / expense) * 100) : 0,
     }))
 
+  // Fund balances (income - expense per fund type)
+  const fundBalances = {
+    bank: (incomeByFundType['bank'] || 0) - (expenseByFundType['bank'] || 0),
+    ewallet: (incomeByFundType['ewallet'] || 0) - (expenseByFundType['ewallet'] || 0),
+    cash: (incomeByFundType['cash'] || 0) - (expenseByFundType['cash'] || 0),
+  }
+
   return {
     transactions,
     loading,
@@ -142,12 +196,13 @@ export function useTransactions(period: Period = 'all', offset: number = 0) {
     refetch: fetch,
     addTransaction,
     deleteTransaction,
+    transferFund,
     // summary
     income,
     expense,
     balance,
     categorySummary,
     fundTypeIncomeSummary,
-    fundTypeExpenseSummary,
+    fundBalances,
   }
 }

@@ -15,6 +15,7 @@ import { exportTransactionsToCsv } from '@/lib/export'
 import TransactionModal from '@/components/modals/TransactionModal'
 import GoalModal from '@/components/modals/GoalModal'
 import DeletePeriodModal from '@/components/modals/DeletePeriodModal'
+import TransferFundModal from '@/components/modals/TransferFundModal'
 import DatePicker from '@/components/ui/DatePicker'
 import CashFlowChart from '@/components/ui/CashFlowChart'
 import ProfileTab from '@/components/layout/ProfileTab'
@@ -40,14 +41,15 @@ export default function DashboardPage() {
   const [incomeModal, setIncomeModal] = useState(false)
   const [expenseModal, setExpenseModal] = useState(false)
   const [goalModal, setGoalModal] = useState(false)
+  const [transferFundModal, setTransferFundModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState<string | null>(null)
   const [spendLimit, setSpendLimit] = useState(0)
   const [limitInput, setLimitInput] = useState('')
   const [deletePeriodModal, setDeletePeriodModal] = useState(false)
   const [profile, setProfile] = useState<Profile | null>(null)
 
-  const { transactions, loading, addTransaction, deleteTransaction,
-    income, expense, balance, categorySummary, fundTypeIncomeSummary, refetch } = useTransactions(period, offset)
+  const { transactions, loading, addTransaction, deleteTransaction, transferFund,
+    income, expense, balance, categorySummary, fundBalances, refetch } = useTransactions(period, offset)
   const { goals, addGoal, updateGoal, deleteGoal, refetch: refetchGoals } = useGoals()
 
   // Cek auth & load profile
@@ -254,34 +256,25 @@ export default function DashboardPage() {
                   <p className="text-sm font-medium">{fmtRp(expense)}</p>
                 </div>
               </div>
-              
-              {/* Jenis uang penyimpanan */}
-              {fundTypeIncomeSummary.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-white/20">
-                  <p className="text-xs opacity-70 mb-2">Jenis uang penyimpanan</p>
-                  <div className="space-y-1.5">
-                    {fundTypeIncomeSummary.map(({ fund_type, total, percentage }) => (
-                      <div key={fund_type} className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded flex items-center justify-center text-xs flex-shrink-0">
-                          {fund_type === 'bank' && '🏦'}
-                          {fund_type === 'ewallet' && '📱'}
-                          {fund_type === 'cash' && '💵'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs opacity-70">{fund_type === 'bank' ? 'Bank' : fund_type === 'ewallet' ? 'E-Wallet' : 'Tunai'}</p>
-                          <div className="h-0.5 bg-white/20 rounded-full mt-0.5 overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-white/60"
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                        <p className="text-xs font-medium opacity-90 min-w-[55px] text-right">{fmtRp(total)}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+            </div>
+
+            {/* Jenis uang penyimpanan (fund types) - 3 columns */}
+            <div className="flex gap-2 mx-4 mb-3">
+              {[
+                { key: 'bank', label: 'Bank', icon: '🏦' },
+                { key: 'ewallet', label: 'E-Wallet', icon: '📱' },
+                { key: 'cash', label: 'Tunai', icon: '💵' },
+              ].map(ft => (
+                <button
+                  key={ft.key}
+                  onClick={() => setTransferFundModal(true)}
+                  className="flex-1 bg-blue-50 hover:bg-blue-100 rounded-xl p-2.5 text-center border border-blue-100 transition-all"
+                >
+                  <p className="text-lg mb-1">{ft.icon}</p>
+                  <p className="text-xs text-blue-600 font-medium">{ft.label}</p>
+                  <p className="text-xs text-blue-700 font-medium mt-1">{fmtRp(fundBalances[ft.key as keyof typeof fundBalances] || 0)}</p>
+                </button>
+              ))}
             </div>
 
             {/* Quick actions */}
@@ -545,6 +538,16 @@ export default function DashboardPage() {
           label={getPeriodRange(period, offset).label}
           onClose={() => setDeletePeriodModal(false)}
           onConfirm={handleDeletePeriod}
+        />
+      )}
+      {transferFundModal && (
+        <TransferFundModal
+          fundBalances={fundBalances}
+          onClose={() => setTransferFundModal(false)}
+          onSave={async (fromFund, toFund, amount) => {
+            await transferFund(fromFund, toFund, amount)
+            setTransferFundModal(false)
+          }}
         />
       )}
     </div>

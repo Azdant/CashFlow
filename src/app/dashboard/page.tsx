@@ -40,14 +40,15 @@ export default function DashboardPage() {
   const [incomeModal, setIncomeModal] = useState(false)
   const [expenseModal, setExpenseModal] = useState(false)
   const [goalModal, setGoalModal] = useState(false)
+  const [editingGoal, setEditingGoal] = useState<string | null>(null)
   const [spendLimit, setSpendLimit] = useState(0)
   const [limitInput, setLimitInput] = useState('')
   const [deletePeriodModal, setDeletePeriodModal] = useState(false)
   const [profile, setProfile] = useState<Profile | null>(null)
 
   const { transactions, loading, addTransaction, deleteTransaction,
-    income, expense, balance, categorySummary, refetch } = useTransactions(period, offset)
-  const { goals, addGoal, deleteGoal, refetch: refetchGoals } = useGoals()
+    income, expense, balance, categorySummary, fundTypeIncomeSummary, fundTypeExpenseSummary, refetch } = useTransactions(period, offset)
+  const { goals, addGoal, updateGoal, deleteGoal, refetch: refetchGoals } = useGoals()
 
   // Cek auth & load profile
   useEffect(() => {
@@ -271,13 +272,7 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Chart (moved to top) */}
-            <div className="mx-4 mb-3 border border-gray-100 rounded-xl p-3">
-              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-2">Arus kas</p>
-              <CashFlowChart transactions={transactions} period={period} />
-            </div>
-
-            {/* Stat cards */}
+            {/* Stat cards (moved up) */}
             <div className="flex gap-2 mx-4 mb-3">
               {[
                 { label: 'Pemasukan', val: income, color: 'text-emerald-700' },
@@ -289,6 +284,12 @@ export default function DashboardPage() {
                   <p className={`text-xs font-medium ${s.color}`}>{fmtRp(s.val)}</p>
                 </div>
               ))}
+            </div>
+
+            {/* Chart (moved down) */}
+            <div className="mx-4 mb-3 border border-gray-100 rounded-xl p-3">
+              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-2">Arus kas</p>
+              <CashFlowChart transactions={transactions} period={period} />
             </div>
 
             {/* Pengeluaran per kategori (moved down) */}
@@ -323,6 +324,73 @@ export default function DashboardPage() {
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Jenis uang penyimpanan (fund types) */}
+            <div className="mx-4 mb-3 border border-gray-100 rounded-xl p-3">
+              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-3">Jenis uang penyimpanan</p>
+              
+              {/* Pemasukan per fund type */}
+              <div className="mb-3">
+                <p className="text-xs text-gray-600 font-medium mb-2">Pemasukan</p>
+                {fundTypeIncomeSummary.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-1 text-center">Belum ada pemasukan.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {fundTypeIncomeSummary.map(({ fund_type, total, percentage }) => (
+                      <div key={fund_type} className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg flex items-center justify-center text-xs flex-shrink-0" title={fund_type}>
+                          {/* Fund type icon from utils */}
+                          {fund_type === 'bank' && '🏦'}
+                          {fund_type === 'ewallet' && '📱'}
+                          {fund_type === 'cash' && '💵'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-700">{fund_type === 'bank' ? 'Bank' : fund_type === 'ewallet' ? 'E-Wallet' : 'Tunai'}</p>
+                          <div className="h-0.5 bg-gray-100 rounded-full mt-0.5 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-emerald-500"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                        <p className="text-xs font-medium text-emerald-700 min-w-[60px] text-right">{fmtRp(total)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Pengeluaran per fund type */}
+              <div>
+                <p className="text-xs text-gray-600 font-medium mb-2">Pengeluaran</p>
+                {fundTypeExpenseSummary.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-1 text-center">Belum ada pengeluaran.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {fundTypeExpenseSummary.map(({ fund_type, total, percentage }) => (
+                      <div key={fund_type} className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg flex items-center justify-center text-xs flex-shrink-0" title={fund_type}>
+                          {/* Fund type icon from utils */}
+                          {fund_type === 'bank' && '🏦'}
+                          {fund_type === 'ewallet' && '📱'}
+                          {fund_type === 'cash' && '💵'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-700">{fund_type === 'bank' ? 'Bank' : fund_type === 'ewallet' ? 'E-Wallet' : 'Tunai'}</p>
+                          <div className="h-0.5 bg-gray-100 rounded-full mt-0.5 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-red-500"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                        <p className="text-xs font-medium text-red-700 min-w-[60px] text-right">{fmtRp(total)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Transaksi terbaru */}
@@ -380,7 +448,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between">
               <span className="text-base font-medium text-gray-900">Goals</span>
               <button
-                onClick={() => setGoalModal(true)}
+                onClick={() => { setEditingGoal(null); setGoalModal(true) }}
                 className="text-xs text-emerald-700 font-medium px-3 py-1.5 rounded-lg border border-emerald-200"
               >
                 + Tambah
@@ -392,7 +460,7 @@ export default function DashboardPage() {
               <div className="text-center py-12">
                 <p className="text-sm text-gray-400">Belum ada goal.</p>
                 <button
-                  onClick={() => setGoalModal(true)}
+                  onClick={() => { setEditingGoal(null); setGoalModal(true) }}
                   className="mt-3 text-xs text-emerald-700 font-medium"
                 >
                   Tambah goal pertama →
@@ -405,20 +473,28 @@ export default function DashboardPage() {
                 <div key={g.id} className="border border-gray-100 rounded-xl p-3">
                   <div className="flex items-start justify-between mb-1">
                     <p className="text-sm font-medium text-gray-800">{emojis[i % 10]} {g.name}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      done ? 'bg-emerald-50 text-emerald-700' :
-                      g.percentage >= 80 ? 'bg-amber-50 text-amber-700' :
-                      'bg-blue-50 text-blue-700'
-                    }`}>
-                      {done ? '✓ Tercapai' : g.percentage + '%'}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        done ? 'bg-emerald-50 text-emerald-700' :
+                        g.percentage >= 80 ? 'bg-amber-50 text-amber-700' :
+                        'bg-blue-50 text-blue-700'
+                      }`}>
+                        {done ? '✓ Tercapai' : g.percentage + '%'}
+                      </span>
+                      <button
+                        onClick={() => setEditingGoal(g.id)}
+                        className="text-xs text-gray-400 hover:text-gray-600 px-2"
+                      >
+                        ✏️
+                      </button>
+                    </div>
                   </div>
                   <p className="text-xs text-gray-400 mb-2">Dari: {g.tracked_categories.join(', ')}</p>
                   <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-2">
                     <div
                       className="h-full rounded-full transition-all"
                       style={{
-                        width: `${g.percentage}%`,
+                        width: `${Math.min(g.percentage, 100)}%`,
                         background: done ? '#059669' : g.percentage >= 80 ? '#d97706' : '#2563eb',
                       }}
                     />
@@ -484,8 +560,22 @@ export default function DashboardPage() {
       )}
       {goalModal && (
         <GoalModal
-          onClose={() => setGoalModal(false)}
-          onSave={async (input) => { await addGoal(input); setGoalModal(false) }}
+          goal={editingGoal ? goals.find(g => g.id === editingGoal) : null}
+          onClose={() => { setGoalModal(false); setEditingGoal(null) }}
+          onSave={async (input) => {
+            if (editingGoal) {
+              await updateGoal(editingGoal, input)
+              setEditingGoal(null)
+            } else {
+              await addGoal(input)
+            }
+            setGoalModal(false)
+          }}
+          onDelete={async (id) => {
+            await deleteGoal(id)
+            setGoalModal(false)
+            setEditingGoal(null)
+          }}
         />
       )}
       {deletePeriodModal && (

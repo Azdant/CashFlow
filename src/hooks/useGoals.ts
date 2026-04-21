@@ -68,6 +68,17 @@ export function useGoals() {
     return { data, error }
   }
 
+  // ── Update goal ───────────────────────────────────────────
+  const updateGoal = async (id: string, input: GoalInput) => {
+    const { error } = await supabase
+      .from('goals')
+      .update(input)
+      .eq('id', id)
+
+    if (!error) await fetch()
+    return { error }
+  }
+
   // ── Hapus goal ────────────────────────────────────────────
   const deleteGoal = async (id: string) => {
     const { error } = await supabase
@@ -79,5 +90,5 @@ export function useGoals() {
     return { error }
   }
 
-  return { goals, loading, refetch: fetch, addGoal, deleteGoal }
+  return { goals, loading, refetch: fetch, addGoal, updateGoal, deleteGoal }
 }

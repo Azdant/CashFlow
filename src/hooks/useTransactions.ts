@@ -103,6 +103,38 @@ export function useTransactions(period: Period = 'all', offset: number = 0) {
       percentage: expense > 0 ? Math.round((total / expense) * 100) : 0,
     }))
 
+  // Pemasukan per jenis uang penyimpanan (fund type)
+  const incomeByFundType = transactions
+    .filter(t => t.type === 'income')
+    .reduce((acc, t) => {
+      acc[t.fund_type] = (acc[t.fund_type] || 0) + t.amount
+      return acc
+    }, {} as Record<string, number>)
+
+  const fundTypeIncomeSummary = Object.entries(incomeByFundType)
+    .sort((a, b) => b[1] - a[1])
+    .map(([fund_type, total]) => ({
+      fund_type,
+      total,
+      percentage: income > 0 ? Math.round((total / income) * 100) : 0,
+    }))
+
+  // Pengeluaran per jenis uang penyimpanan (fund type)
+  const expenseByFundType = transactions
+    .filter(t => t.type === 'expense')
+    .reduce((acc, t) => {
+      acc[t.fund_type] = (acc[t.fund_type] || 0) + t.amount
+      return acc
+    }, {} as Record<string, number>)
+
+  const fundTypeExpenseSummary = Object.entries(expenseByFundType)
+    .sort((a, b) => b[1] - a[1])
+    .map(([fund_type, total]) => ({
+      fund_type,
+      total,
+      percentage: expense > 0 ? Math.round((total / expense) * 100) : 0,
+    }))
+
   return {
     transactions,
     loading,
@@ -115,5 +147,7 @@ export function useTransactions(period: Period = 'all', offset: number = 0) {
     expense,
     balance,
     categorySummary,
+    fundTypeIncomeSummary,
+    fundTypeExpenseSummary,
   }
 }
